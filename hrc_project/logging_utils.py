@@ -44,3 +44,29 @@ class ExperimentLogger:
         temporary.write_text(json.dumps(self.entries, indent=2, allow_nan=False) + "\n", encoding="utf-8")
         temporary.replace(self.path)
         return entry
+
+
+class HRCLogger:
+    """Persist complete HRC states in unique files without changing baseline logs."""
+
+    def __init__(self, log_dir=None, metadata=None):
+        self.run_id = uuid4().hex
+        directory = Path(log_dir) if log_dir is not None else Path(__file__).parent / "logs"
+        directory.mkdir(parents=True, exist_ok=True)
+        self.path = directory / f"hrc_{self.run_id}.json"
+        self.entries = []
+        self.metadata = dict(metadata or {})
+        with self.path.open("x", encoding="utf-8") as stream:
+            json.dump(self.document(), stream, indent=2, allow_nan=False)
+
+    def document(self):
+        return {"run_id": self.run_id, "metadata": self.metadata, "states": self.entries}
+
+    def record(self, state):
+        entry = state.to_dict()
+        json.dumps(entry, allow_nan=False)
+        self.entries.append(entry)
+        temporary = self.path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(self.document(), indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        temporary.replace(self.path)
+        return entry

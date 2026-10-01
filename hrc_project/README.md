@@ -107,10 +107,133 @@ When live verification is unavailable:
 5. Press Ctrl+C during a longer run; confirm the log path is printed, earlier
    completed steps remain readable, and the Python connection closes.
 
+## Milestone 2: two-agent proximity scenario
+
+`run_hrc_scenario.py` adds a separate scenario without changing the original
+baseline commands or policies. **The robot-role agent is temporarily represented
+by a humanoid visual placeholder**, not a construction robot model. The second
+humanoid represents a worker. Both use the existing Base humanoid Blueprint.
+
+- `agents/scripted_worker.py` waits for two scenario steps, executes twelve
+  `forward 0.5` commands, then waits indefinitely. Constructor arguments allow
+  a different delay, sequence, duration, and crossing length; `reset()` restarts
+  the sequence. The worker never responds to the robot or distance zones.
+- `state/hrc_state.py` defines typed, immutable `Point2D` and `HRCState` values.
+- `state/state_extractor.py` reads each actor's live location and orientation
+  using supported UnrealCV APIs, converts yaw to direction, and calculates
+  Euclidean separation and inclusive proximity zones. The calculation function
+  is simulator-independent and tested offline.
+- `logging_utils.HRCLogger` writes unique `logs/hrc_<run_id>.json` files with
+  `run_id`, run `metadata`, and a `states` array. Every entry contains all
+  HRCState fields, including both actions. Files are flushed after each step.
+  Original baseline logs retain their existing format.
+
+The robot starts at `(0, 0)` facing +X and seeks `(1600, 0)`. The worker starts
+at `(600, -600)` facing +Y, away from the robot's route. Both walking speeds are
+set to 200; robot forward actions last 0.5 seconds. The nominal worker path
+crosses the route at `(600, 0)`. The scenario uses this straight route to make
+the crossing easy to inspect; the original baseline target remains unchanged.
+IDs and names are distinct. Existing UE object names are checked and skipped
+when allocating humanoids, avoiding reuse of actors from previous processes.
+Role-to-ID/name mappings are printed and saved in metadata. Camera IDs are
+allocated by the existing Humanoid class but no camera is read or used.
+
+The caution threshold defaults to **300 Unreal units**, and the stop threshold
+to **150 Unreal units**, with `distance <= threshold` counting as inside.
+Both thresholds are **provisional implementation placeholders, not validated
+construction-safety distances**. They will later be replaced by context-dependent
+parameters. `stop=True` also implies `caution=True`. These are descriptive
+state labels only: no slowing, stopping, safety rule, explanation, or dialogue
+is implemented.
+
+### Run on Windows
+
+Start a fresh Base `demo_1` SimWorld backend first. Then:
+
+```powershell
+cd C:\Users\m09238yx\SimWorld-Construction
+conda activate simworld
+python hrc_project\run_hrc_scenario.py --max-steps 20
+```
+
+Optional scenario parameters:
+
+```powershell
+python hrc_project\run_hrc_scenario.py --max-steps 20 --worker-delay-steps 2 --caution-distance 300 --stop-distance 150
+```
+
+Expected console format (illustrative positions, not a guaranteed UE trace):
+
+```text
+robot_role (humanoid visual placeholder): GEN_BP_Humanoid_0, id=0
+worker_role: GEN_BP_Humanoid_1, id=1
+Step 6: robot=forward 0.5; worker=forward 0.5; robot_position=(600.0, 0.0); worker_position=(600.0, -200.0); distance=200.0; caution=True; stop=False
+Caution-zone samples: ...
+HRC log: C:\Users\m09238yx\SimWorld-Construction\hrc_project\logs\hrc_<run_id>.json
+```
+
+Expect the robot to advance, the worker to wait and cross, live separation to
+change, and at least one `caution=True` sample if the installed scene supports
+the intended path. The runner reports when no caution sample occurs rather
+than claiming success. It continues to log after the robot reaches its target
+so the whole worker sequence can be inspected. `task_phase` is
+`worker_waiting`, `worker_crossing`, or `worker_finished` and tracks the scripted
+command phase, not independently verified task completion.
+
+Inspect the exact path printed by your run, or inspect the latest HRC log:
+
+```powershell
+$logFile = Get-ChildItem .\hrc_project\logs\hrc_*.json | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$hrcRun = Get-Content -Raw -LiteralPath $logFile.FullName | ConvertFrom-Json
+$hrcRun.metadata
+$hrcRun.states | Select-Object simulation_step, robot_action, worker_action, human_robot_distance, worker_in_caution_zone, worker_in_stop_zone | Format-Table
+```
+
+### Limitations and manual verification
+
+Verified on the installed Base backend on 2026-10-01: a 20-step live run spawned
+distinct `GEN_BP_Humanoid_1` and `GEN_BP_Humanoid_2`. The worker crossed from
+negative to positive Y at step 8. Caution was recorded at steps 6, 7, and 8;
+step 7 separation was about 141.6 units and also triggered the stop-zone label.
+Both roles continued their predetermined actions. The full state sequence was
+written to `logs/hrc_77f69edebb084712b36f69facd068149.json` (ignored by Git).
+All 38 offline tests, including unchanged baseline regressions, passed, as did
+syntax compilation and CLI import/help checks. These observations verify this
+installed backend, not physical safety or identical future trajectories.
+
+Commands run sequentially: robot first, worker second, then both live poses are
+sampled. This is one **scenario step**, not simultaneous motion or one UE
+physics tick. Timestamp is UTC wall-clock sampling time. Pose reads are also
+sequential. The fixed script is reproducible, but UE physics, frame timing,
+terrain, collision geometry, and actual walking speed can change trajectories.
+Endpoint sampling can miss proximity between samples. Both agents are
+humanoids with collision enabled; their movement is not obstacle-aware.
+
+All multi-agent methods are existing client APIs: `spawn_agent`,
+`get_humanoid_name`, `get_objects`, `set_location`, `set_orientation`,
+`humanoid_set_speed`, `humanoid_stop`, `humanoid_step_forward`,
+`humanoid_rotate`, `get_location`, `get_orientation`, and `disconnect`.
+Spawn presence is checked before movement. There is no camera-ID assumption,
+new Blueprint, external API request, or LLM call.
+
+For every fresh backend/version, verify two distinct names, the worker's +Y
+heading, actual crossing of y=0, changing separation, and at least one caution
+sample in the JSON. If a spawn or pose response fails, the runner stops and
+preserves completed log entries. If the worker never crosses or caution never
+occurs, inspect the scene and timing rather than interpreting the run as a
+successful proximity scenario. Restart UE for comparable repeated runs;
+disconnect does not remove actors, and old actors can obstruct later trials.
+
+Run all regression and new tests with the unchanged command:
+
+```powershell
+python -m pytest hrc_project/tests -q
+python -m compileall -q hrc_project
+python hrc_project\run_hrc_scenario.py --help
+```
+
 ## Next milestone
 
-- Second humanoid worker.
-- Obstacle/occlusion object.
-- Structured HRC state extraction.
-
-These extensions and dialogue-based safety explanations are not implemented.
+Obstacle/occlusion perception and structured context beyond proximity.
+Obstacle assets, perception, dialogue, explanation generation, and safety
+decision rules are not implemented in this milestone.
