@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from hrc_project.scenario_config import ScenarioConfig
+from hrc_project.scenario import ScenarioConfig
 from hrc_project.state import Point2D
 from hrc_project.state.crossing_tracker import CrossingTracker
 
@@ -79,3 +79,19 @@ def test_rotated_crossing():
     tracker = CrossingTracker(Point2D(10, 20), Point2D(10, 120))
     tracker.update(Point2D(-50, 70))
     assert tracker.update(Point2D(50, 70))["worker_crossing_event"]
+
+
+def test_role_blueprint_override_and_fallback():
+    config = ScenarioConfig.load()
+    assert config.blueprint("worker") == "/Game/TrafficSystem/Pedestrian/Base_Pedestrian.Base_Pedestrian_C"
+    assert config.blueprint("robot") == config.data["blueprint"]
+    data = config.data
+    del data["worker"]["blueprint"]
+    assert ScenarioConfig(data).blueprint("worker") == data["blueprint"]
+
+
+def test_unknown_role_blueprint_rejected():
+    data = ScenarioConfig.load().data
+    data["robot"]["blueprint"] = "/Game/Unknown.Unknown_C"
+    with pytest.raises(ValueError, match="robot.blueprint"):
+        ScenarioConfig(data)

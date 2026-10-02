@@ -13,6 +13,7 @@
     "maximum_turn_degrees": 45
   },
   "worker": {
+    "blueprint": "/Game/TrafficSystem/Pedestrian/Base_Pedestrian.Base_Pedestrian_C",
     "start": {"x": 600, "y": -600},
     "target": {"x": 600, "y": 600},
     "heading_degrees": 90,

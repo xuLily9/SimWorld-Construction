@@ -1,7 +1,6 @@
 """Two humanoid roles, sequential fixed actions, and live proximity observations."""
 
 import argparse
-import math
 from pathlib import Path
 import socket
 import sys
@@ -13,63 +12,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from hrc_project.agents import DeterministicNavigator
 from hrc_project.agents.scripted_worker import ScriptedWorker
+from hrc_project.environment import nonnegative_int, positive_int
 from hrc_project.logging_utils import HRCLogger
-from hrc_project.environment import Environment, positive_int, nonnegative_int
+from hrc_project.environment import RoleEnvironment
+from hrc_project.scenario import DEFAULT_CONFIG, ScenarioConfig, run_steps
 from hrc_project.state import StateExtractor
-from hrc_project.scenario_config import DEFAULT_CONFIG, ScenarioConfig
-from hrc_project.scenario_runner import run_steps
-
-
-class RoleEnvironment(Environment):
-    """Spawn and reset a configured role using the shared action dispatcher.
-
-    Humanoid IDs are allocated by SimWorld. Skip names already present in UE
-    rather than reusing actors from a previous Python process. Camera IDs are
-    allocated by Humanoid too, but are not used by this scenario.
-    """
-
-    def __init__(self, communicator, role, config):
-        super().__init__(communicator, load_demo_roads=False)
-        self.role = role
-        self.scenario_config = config
-        spawn_position, spawn_direction = config.world_point(role, "start"), config.direction(role)
-        target = config.world_point(role, "target")
-        self.spawn_position = self.Vector(spawn_position.x, spawn_position.y)
-        self.spawn_direction = self.Vector(spawn_direction.x, spawn_direction.y)
-        self.target = self.Vector(target.x, target.y)
-
-    def reset(self):
-        from simworld.agent.humanoid import Humanoid
-
-        if self.agent is None:
-            existing = set(self.communicator.unrealcv.get_objects())
-            while True:
-                candidate = Humanoid(
-                    communicator=self.communicator, position=self.spawn_position,
-                    direction=self.spawn_direction, config=self.config, map=self.map,
-                )
-                name = self.communicator.get_humanoid_name(candidate.id)
-                if name not in existing:
-                    break
-            self.agent, self.agent_name = candidate, name
-            self.communicator.spawn_agent(
-                self.agent, name=None,
-                model_path=self.scenario_config.data["blueprint"],
-                position=[self.spawn_position.x, self.spawn_position.y, self.scenario_config.data["origin"]["spawn_z"]],
-                type="humanoid",
-            )
-            time.sleep(1)
-            if self.agent_name not in set(self.communicator.unrealcv.get_objects()):
-                raise RuntimeError(f"Spawn not confirmed for {self.role}: {self.agent_name}")
-        self.communicator.humanoid_stop(self.agent.id)
-        self.communicator.unrealcv.set_location(
-            [self.spawn_position.x, self.spawn_position.y, self.scenario_config.data["origin"]["spawn_z"]], self.agent_name,
-        )
-        yaw = math.degrees(math.atan2(self.spawn_direction.y, self.spawn_direction.x))
-        self.communicator.unrealcv.set_orientation([0, yaw, 0], self.agent_name)
-        self.communicator.humanoid_set_speed(self.agent.id, self.scenario_config.data[self.role]["speed"])
-        time.sleep(self.scenario_config.data["run"]["spawn_settle_seconds"])
-        return self.observe()
 
 
 def main(argv=None):
@@ -100,6 +47,7 @@ def main(argv=None):
     logger = HRCLogger(metadata={
         "robot_visual_placeholder": "humanoid", "config_path": str(args.config.resolve()),
         "scenario_config": config.data,
+        "role_blueprints": {role: config.blueprint(role) for role in ("robot", "worker")},
         "world_geometry": {role: {key: vars(config.world_point(role, key)) for key in ("start", "target")}
                            for role in ("robot", "worker")},
         "thresholds_validated_for_safety": False, "execution_order": ["robot_role", "worker_role"],

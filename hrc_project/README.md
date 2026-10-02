@@ -7,10 +7,9 @@
 | 文件 | 用途 |
 | --- | --- |
 | `scenario.json` | 场景几何、速度、延迟、导航和诊断参数 |
-| `scenario_config.py` | 配置读取、校验和局部坐标变换 |
-| `run_hrc_scenario.py` | CLI、创建角色及连接生命周期 |
-| `scenario_runner.py` | 执行循环、运动诊断和结果汇总 |
-| `environment.py` | 共用环境：位姿观察、动作执行和 CLI 数值校验 |
+| `scenario.py` | 场景配置、坐标变换、执行循环和诊断 |
+| `run_hrc_scenario.py` | CLI、配置覆盖和连接生命周期 |
+| `environment.py` | 两种环境、角色创建、位姿观察和模型动作适配 |
 | `agents/` | 目标导航、固定动作序列和 worker 策略 |
 | `state/` | 状态结构、位姿提取和有限路线穿越检测 |
 | `logging_utils.py` | 唯一运行编号及逐步写入的 JSON 日志 |
@@ -43,6 +42,8 @@ python -m hrc_project.run_hrc_scenario --help
 ```
 
 ## 配置和执行
+
+robot 使用目标导航策略和 `Base_User_Agent` 占位模型，worker 使用固定穿越策略和 `Base_Pedestrian` 行人模型。顶层 `blueprint` 提供默认模型，各角色的 `blueprint` 可覆盖默认值。动作解析由 `environment.parse_action` 共用，角色控制由 `environment.py` 按模型选择：humanoid 使用 `StepForward`，行人使用 `MoveForward` 并在指定时长后发送 `StopPedestrian`。角色模型与动作策略分别配置。
 
 参数集中在 `scenario.json`。`map` 描述需要手动打开的地图，程序不会切换或验证当前 UE 地图；接受 `/Game/...` 地图路径，并自动去掉可选的 `.umap` 后缀。仍使用现有 `Base_User_Agent` Blueprint。scenario 不加载 demo 城市道路图，直接依靠观测朝向和坐标导航；单角色 baseline 仍保留原有 demo 道路配置。
 
