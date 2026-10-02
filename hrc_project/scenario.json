@@ -1,0 +1,27 @@
+{
+  "map": "/Game/HRConstruction/Model",
+  "blueprint": "/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C",
+  "origin": {"x": 0, "y": 0, "spawn_z": 600, "yaw_degrees": 0},
+  "robot": {
+    "start": {"x": 0, "y": 0},
+    "target": {"x": 1600, "y": 0},
+    "heading_degrees": 0,
+    "speed": 200,
+    "forward_duration": 0.5,
+    "goal_distance_threshold": 200,
+    "heading_tolerance_degrees": 5,
+    "maximum_turn_degrees": 45
+  },
+  "worker": {
+    "start": {"x": 600, "y": -600},
+    "target": {"x": 600, "y": 600},
+    "heading_degrees": 90,
+    "speed": 200,
+    "delay_steps": 2,
+    "crossing_steps": 12,
+    "forward_duration": 0.5
+  },
+  "run": {"max_steps": 20, "start_delay_seconds": 5, "spawn_settle_seconds": 5},
+  "zones": {"caution_distance": 300, "stop_distance": 150},
+  "diagnostics": {"movement_epsilon": 1, "stationary_forward_steps": 3, "crossing_epsilon": 1}
+}

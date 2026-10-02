@@ -150,3 +150,43 @@ def test_nominal_crossing_trajectory_and_sequential_dispatch(tmp_path, capsys):
     assert any(state["worker_in_stop_zone"] for state in logger.entries)
     assert not logger.entries[0]["worker_in_caution_zone"]
     assert "Caution-zone samples:" in capsys.readouterr().out
+    assert any(entry["worker_crossing_event"] for entry in logger.entries)
+    assert logger.entries[-1]["worker_crossed_route"]
+    assert logger.entries[0]["robot_displacement"] == 100
+    assert logger.metadata["validation_summary"]["scenario_validated"]
+    assert json.loads(logger.path.read_text())["metadata"]["validation_summary"]["worker_crossed_route"]
+
+
+def test_blocked_roles_emit_diagnostics(tmp_path, capsys):
+    class Role:
+        def __init__(self, name, id, position):
+            self.agent_name, self.agent = name, SimpleNamespace(id=id)
+            self.position = position
+            self.target = Point2D(1600, 0)
+
+        def observe(self):
+            return {"position": self.position, "direction": Point2D(1, 0)}
+
+        def step(self, action):
+            return self.observe(), 0, True
+
+    robot, worker = Role("robot", 0, Point2D(0, 0)), Role("worker", 1, Point2D(600, -600))
+
+    class Backend:
+        def get_location(self, name):
+            p = robot.position if name == "robot" else worker.position
+            return [p.x, p.y, 600]
+
+        def get_orientation(self, name):
+            return [0, 0, 0]
+
+    logger = HRCLogger(tmp_path)
+    run_steps(robot, worker, DeterministicNavigator(forward_duration=0.5),
+              ScriptedWorker(), StateExtractor(Backend()), logger, 5)
+    output = capsys.readouterr().out
+    assert "[No movement] robot" in output
+    assert "[No movement] worker" in output
+    assert "[Movement warning]" in output
+    assert "[Crossing missing]" in output
+    assert "No caution event observed" in output
+    assert not logger.metadata["validation_summary"]["scenario_validated"]

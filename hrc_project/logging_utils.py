@@ -62,11 +62,18 @@ class HRCLogger:
     def document(self):
         return {"run_id": self.run_id, "metadata": self.metadata, "states": self.entries}
 
-    def record(self, state):
-        entry = state.to_dict()
-        json.dumps(entry, allow_nan=False)
-        self.entries.append(entry)
+    def flush(self):
         temporary = self.path.with_suffix(".tmp")
         temporary.write_text(json.dumps(self.document(), indent=2, allow_nan=False) + "\n", encoding="utf-8")
         temporary.replace(self.path)
+
+    def record(self, state, diagnostics=None):
+        entry = state.to_dict()
+        if diagnostics:
+            if set(entry) & set(diagnostics):
+                raise ValueError("diagnostics must not overwrite HRCState fields")
+            entry.update(diagnostics)
+        json.dumps(entry, allow_nan=False)
+        self.entries.append(entry)
+        self.flush()
         return entry
